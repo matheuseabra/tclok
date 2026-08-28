@@ -88,6 +88,66 @@ pub fn terminal_pixel_size() -> Option<(u16, u16)> {
 }
 
 #[cfg(not(target_os = "macos"))]
+pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
+    None
+}
+
+#[cfg(target_os = "macos")]
+pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
+    const ICANON: c_ulong = 0x0000_0100;
+    const ECHO: c_ulong = 0x0000_0008;
+    const VMIN: usize = 16;
+    const VTIME: usize = 17;
+    const TCSANOW: c_int = 0;
+    let mut original = std::mem::MaybeUninit::<Termios>::uninit();
+    // SAFETY: stdin is a valid terminal file descriptor in interactive mode;
+    // `original` points to enough writable space for the Darwin termios ABI.
+    if unsafe { tcgetattr(STDIN_FILENO, original.as_mut_ptr()) } != 0 {
+        return None;
+    }
+    // SAFETY: `tcgetattr` succeeded above, so the structure is initialized.
+    let original = unsafe { original.assume_init() };
+    let mut query_mode = original;
+    query_mode.local_flags &= !(ICANON | ECHO);
+    query_mode.control_characters[VMIN] = 0;
+    query_mode.control_characters[VTIME] = 1;
+    // SAFETY: `query_mode` is based on a valid termios value and differs only
+    // in local input behavior for the bounded query below.
+    if unsafe { tcsetattr(STDIN_FILENO, TCSANOW, &query_mode) } != 0 {
+        return None;
+    }
+    let mut response = [0_u8; 128];
+    // SAFETY: stdout is valid; OSC 10 is the standard foreground-color query.
+    let mut stdout = io::stdout().lock();
+    let write_result = stdout.write_all(b"\x1b]10;?\x1b\\");
+    let _ = stdout.flush();
+    let length = if write_result.is_ok() {
+        // SAFETY: `response` is writable and VTIME bounds this read.
+        unsafe { read(STDIN_FILENO, response.as_mut_ptr(), response.len()) }
+    } else {
+        -1
+    };
+    // SAFETY: restore the exact terminal settings captured before the query.
+    let _ = unsafe { tcsetattr(STDIN_FILENO, TCSANOW, &original) };
+    (length > 0)
+        .then(|| parse_foreground_response(&response[..length as usize]))
+        .flatten()
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_foreground_response(bytes: &[u8]) -> Option<(f64, f64, f64)> {
+    let response = std::str::from_utf8(bytes).ok()?;
+    let value = response.split_once("rgb:")?.1;
+    let value = value.split(['\x07', '\x1b']).next()?;
+    let mut channels = value.split('/').map(|channel| {
+        let bits = channel.len().checked_mul(4)?;
+        let max = (1_u32.checked_shl(bits as u32)? - 1) as f64;
+        Some(u32::from_str_radix(channel, 16).ok()? as f64 / max)
+    });
+    Some((channels.next()??, channels.next()??, channels.next()??))
+}
+
+#[cfg(not(target_os = "macos"))]
 fn query_terminal_pixel_size() -> Option<(u16, u16)> {
     None
 }
@@ -247,6 +307,21 @@ impl Drop for TerminalSession {
 #[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_osc_foreground_color() {
+        let color = parse_foreground_response(b"\x1b]10;rgb:1234/abcd/ffff\x1b\\")
+            .expect("valid OSC response");
+        assert!((color.0 - 0x1234 as f64 / 0xffff as f64).abs() < f64::EPSILON);
+        assert!((color.1 - 0xabcd as f64 / 0xffff as f64).abs() < f64::EPSILON);
+        assert!((color.2 - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn rejects_malformed_osc_foreground_color() {
+        assert!(parse_foreground_response(b"\x1b]10;rgb:gggg/0000/ffff\x1b\\").is_none());
+        assert!(parse_foreground_response(b"\x1b]10;rgb:ffff/ffff\x1b\\").is_none());
+    }
 
     #[test]
     fn parses_the_standard_pixel_size_reply() {

@@ -33,13 +33,14 @@ fn run() -> Result<(), String> {
     }
 
     let _session = terminal::TerminalSession::enter().map_err(|error| error.to_string())?;
+    let foreground = terminal::terminal_foreground_color();
     while !terminal::stop_requested() {
         if let Some(size) = terminal::terminal_size() {
             let clock = ClockSnapshot::now(options);
             let frame = if env::var("TERM_PROGRAM")
                 .is_ok_and(|program| program.eq_ignore_ascii_case("ghostty"))
             {
-                neue_machina::render(size, terminal::terminal_pixel_size(), &clock)
+                neue_machina::render(size, terminal::terminal_pixel_size(), foreground, &clock)
                     .unwrap_or_else(|| render_frame(&select_layout(size, &clock)))
             } else {
                 render_frame(&select_layout(size, &clock))

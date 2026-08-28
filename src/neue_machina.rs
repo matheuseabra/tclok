@@ -15,11 +15,12 @@ const ESC: &str = "\x1b";
 pub fn render(
     size: TerminalSize,
     pixels: Option<(u16, u16)>,
+    foreground: Option<(f64, f64, f64)>,
     clock: &ClockSnapshot,
 ) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        macos::render(size, pixels, clock)
+        macos::render(size, pixels, foreground, clock)
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -211,6 +212,7 @@ mod macos {
     pub(super) fn render(
         size: TerminalSize,
         pixels: Option<(u16, u16)>,
+        foreground: Option<(f64, f64, f64)>,
         clock: &ClockSnapshot,
     ) -> Option<String> {
         if size.columns < 12 || size.rows < 4 {
@@ -240,7 +242,7 @@ mod macos {
             return None;
         }
         let time = display_time(size, &clock.face_text);
-        let rgba = rasterize(time, width, height)?;
+        let rgba = rasterize(time, width, height, foreground)?;
         let row = (size.rows.saturating_sub(rows) / 2).saturating_add(1);
         let column = (size.columns.saturating_sub(columns) / 2).saturating_add(1);
         let mut frame = kitty_frame(row, column, columns, rows, width, height, &rgba);
@@ -266,7 +268,12 @@ mod macos {
         }
     }
 
-    fn rasterize(text: &str, width: usize, height: usize) -> Option<Vec<u8>> {
+    fn rasterize(
+        text: &str,
+        width: usize,
+        height: usize,
+        foreground: Option<(f64, f64, f64)>,
+    ) -> Option<Vec<u8>> {
         let c_name = b"FiraCode-Bold\0";
         // SAFETY: CoreFoundation copies this valid NUL-terminated UTF-8 name.
         let name =
@@ -379,7 +386,8 @@ mod macos {
         // SAFETY: `context`, `font`, glyphs, and positions are valid for these calls.
         unsafe {
             CGContextSetTextDrawingMode(context, KCG_TEXT_FILL);
-            CGContextSetRGBFillColor(context, 0.94, 0.94, 0.94, 1.0);
+            let (red, green, blue) = foreground.unwrap_or((0.94, 0.94, 0.94));
+            CGContextSetRGBFillColor(context, red, green, blue, 1.0);
             CGContextSetFont(context, font);
             CGContextSetFontSize(context, font_size);
             CGContextShowGlyphsAtPositions(
@@ -400,12 +408,27 @@ mod macos {
 
         #[test]
         fn installed_fira_code_bold_rasterizes_opaque_glyphs() {
-            let Some(rgba) = rasterize("12:34", 640, 180) else {
+            let Some(rgba) = rasterize("12:34", 640, 180, None) else {
                 return;
             };
             let (pixels, remainder) = rgba.as_chunks::<4>();
             assert!(remainder.is_empty());
             assert!(pixels.iter().any(|pixel| pixel[3] > 0));
+        }
+
+        #[test]
+        fn rasterized_face_uses_terminal_foreground_color() {
+            let Some(rgba) = rasterize("12", 320, 180, Some((0.2, 0.8, 0.4))) else {
+                return;
+            };
+            let (pixels, remainder) = rgba.as_chunks::<4>();
+            assert!(remainder.is_empty());
+            assert!(pixels.iter().any(|pixel| {
+                pixel[3] > 0
+                    && f64::from(pixel[0]) / 255.0 < 0.35
+                    && f64::from(pixel[1]) / 255.0 > 0.65
+                    && f64::from(pixel[2]) / 255.0 < 0.55
+            }));
         }
 
         #[test]
@@ -421,6 +444,7 @@ mod macos {
                     columns: 60,
                     rows: 10,
                 },
+                None,
                 None,
                 &clock,
             ) else {
