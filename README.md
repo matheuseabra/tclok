@@ -1,8 +1,8 @@
 # tclok
 
 [![CI](https://github.com/matheuseabra/tclok/actions/workflows/ci.yml/badge.svg)](https://github.com/matheuseabra/tclok/actions/workflows/ci.yml)
-[![crates.io](https://img.shields.io/crates/v/tclok.svg)](https://crates.io/crates/tclok)
-[![License](https://img.shields.io/crates/l/tclok.svg)](LICENSE)
+[![Version](https://img.shields.io/github/v/release/matheuseabra/tclok?label=version)](https://github.com/matheuseabra/tclok/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![tclok running in Ghostty with the native Fira Code Bold face](assets/tclok.gif)
 
