@@ -2,27 +2,28 @@
 
 ## One-time setup
 
-1. Create the public GitHub repository at `matheuseabra/tclok` (or update the URLs in `Cargo.toml`, `README.md`, and `Formula/tclok.rb`).
-2. Push this repository and enable GitHub Actions.
-3. Create a crates.io API token with publish scope, then add it as the `CARGO_REGISTRY_TOKEN` repository secret.
+1. Push this repository and enable GitHub Actions.
+2. Create a crates.io API token with publish scope and add it as the optional `CARGO_REGISTRY_TOKEN` repository secret. Without it, tags still create a GitHub release; publishing to crates.io is skipped.
+3. Add `Formula/tclok.rb` to the public `matheuseabra/homebrew-tap` repository.
 
 ## Release
 
-1. Update `version` in `Cargo.toml` and `Formula/tclok.rb`.
+1. Update `version` in `Cargo.toml` and the Homebrew tap formula.
 2. Run `sh scripts/release-check.sh <version>`.
-3. Compute the package checksum:
+3. Tag the release commit as `v<version>` and push the branch and tag. The release workflow runs the checks, publishes to crates.io when its token is configured, and creates the GitHub release.
+4. Download the immutable GitHub tag archive and compute its checksum:
 
    ```sh
-   shasum -a 256 target/package/tclok-<version>.crate
+   curl -L -o tclok-<version>.tar.gz https://github.com/matheuseabra/tclok/archive/refs/tags/v<version>.tar.gz
+   shasum -a 256 tclok-<version>.tar.gz
    ```
 
-4. Copy that value into `Formula/tclok.rb`, commit, and tag the same commit as `v<version>`. Do not change package-included files after computing the checksum.
-5. Push the branch and tag. The release workflow runs the checks, publishes to crates.io, and creates the GitHub release.
+5. Update the `url` and `sha256` in `matheuseabra/homebrew-tap/Formula/tclok.rb`, then validate it with `brew style` and `brew install --build-from-source matheuseabra/tap/tclok`.
 
-After GitHub has the `Formula/tclok.rb` file, users can install it directly:
+Users can then install it directly:
 
 ```sh
-brew install matheuseabra/tclok/tclok
+brew install matheuseabra/tap/tclok
 ```
 
-The formula intentionally builds from the published crates.io source, so its checksum and Cargo package contents are both release inputs.
+The formula builds from the signed Git tag archive, so Homebrew works even before the crate is published. Once crates.io publishing is enabled, Cargo users can also run `cargo install tclok`.

@@ -7,16 +7,16 @@
 A dependency-free, resize-responsive terminal clock for modern panes.
 
 ```sh
-cargo install tclok
+brew install matheuseabra/tap/tclok
 tclok
 ```
 
 ## Install
 
 ```sh
-cargo install tclok
-# After the Homebrew tap is published:
-brew install matheuseabra/tclok/tclok
+brew install matheuseabra/tap/tclok
+# Or build the current main branch with Cargo:
+cargo install --git https://github.com/matheuseabra/tclok.git tclok
 ```
 
 ## Usage
