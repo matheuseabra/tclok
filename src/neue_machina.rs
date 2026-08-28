@@ -7,7 +7,9 @@
 use crate::clock::ClockSnapshot;
 use crate::layout::TerminalSize;
 
+#[cfg(any(target_os = "macos", test))]
 const IMAGE_ID: u32 = 1_624_011;
+#[cfg(any(target_os = "macos", test))]
 const ESC: &str = "\x1b";
 
 pub fn render(
@@ -26,6 +28,7 @@ pub fn render(
     }
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn encode_base64(bytes: &[u8]) -> String {
     const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
@@ -49,6 +52,7 @@ fn encode_base64(bytes: &[u8]) -> String {
     encoded
 }
 
+#[cfg(any(target_os = "macos", test))]
 fn kitty_frame(
     row: u16,
     column: u16,
