@@ -16,7 +16,7 @@
    shasum -a 256 target/package/tclok-<version>.crate
    ```
 
-4. Copy that value into `Formula/tclok.rb`, commit, and tag the same commit as `v<version>`.
+4. Copy that value into `Formula/tclok.rb`, commit, and tag the same commit as `v<version>`. Do not change package-included files after computing the checksum.
 5. Push the branch and tag. The release workflow runs the checks, publishes to crates.io, and creates the GitHub release.
 
 After GitHub has the `Formula/tclok.rb` file, users can install it directly:
