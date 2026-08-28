@@ -3,6 +3,7 @@ use std::io::{self, IsTerminal, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use crate::Rgb;
 use crate::layout::TerminalSize;
 
 const STDOUT_FILENO: c_int = 1;
@@ -88,12 +89,12 @@ pub fn terminal_pixel_size() -> Option<(u16, u16)> {
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
+pub fn terminal_foreground_color() -> Option<Rgb> {
     None
 }
 
 #[cfg(target_os = "macos")]
-pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
+pub fn terminal_foreground_color() -> Option<Rgb> {
     const ICANON: c_ulong = 0x0000_0100;
     const ECHO: c_ulong = 0x0000_0008;
     const VMIN: usize = 16;
@@ -136,16 +137,20 @@ pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
 
 #[cfg(any(target_os = "macos", test))]
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-fn parse_foreground_response(bytes: &[u8]) -> Option<(f64, f64, f64)> {
+fn parse_foreground_response(bytes: &[u8]) -> Option<Rgb> {
     let response = std::str::from_utf8(bytes).ok()?;
     let value = response.split_once("rgb:")?.1;
     let value = value.split(['\x07', '\x1b']).next()?;
     let mut channels = value.split('/').map(|channel| {
         let bits = channel.len().checked_mul(4)?;
-        let max = (1_u32.checked_shl(bits as u32)? - 1) as f64;
-        Some(u32::from_str_radix(channel, 16).ok()? as f64 / max)
+        let max = 1_u32.checked_shl(bits as u32)? - 1;
+        let value = u32::from_str_radix(channel, 16).ok()?;
+        Some(((value * 255 + max / 2) / max) as u8)
     });
-    Some((channels.next()??, channels.next()??, channels.next()??))
+    let red = channels.next()??;
+    let green = channels.next()??;
+    let blue = channels.next()??;
+    Some(Rgb::new(red, green, blue))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -313,9 +318,7 @@ mod tests {
     fn parses_osc_foreground_color() {
         let color = parse_foreground_response(b"\x1b]10;rgb:1234/abcd/ffff\x1b\\")
             .expect("valid OSC response");
-        assert!((color.0 - 0x1234 as f64 / 0xffff as f64).abs() < f64::EPSILON);
-        assert!((color.1 - 0xabcd as f64 / 0xffff as f64).abs() < f64::EPSILON);
-        assert!((color.2 - 1.0).abs() < f64::EPSILON);
+        assert_eq!(color, Rgb::new(0x12, 0xab, 0xff));
     }
 
     #[test]

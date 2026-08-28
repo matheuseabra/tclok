@@ -156,6 +156,7 @@ mod tests {
             Options {
                 hour_format: HourFormat::H24,
                 show_seconds: true,
+                color: None,
             },
         );
         assert_eq!(snapshot.face_text, "01:01:01");

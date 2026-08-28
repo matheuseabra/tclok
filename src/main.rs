@@ -7,9 +7,9 @@ use tclok::layout::select_layout;
 use tclok::neue_machina;
 use tclok::render::render_frame;
 use tclok::terminal;
-use tclok::{HourFormat, Options};
+use tclok::{HourFormat, Options, Rgb};
 
-const USAGE: &str = "Usage: tclok [--12h|--24h] [--seconds|--no-seconds]\n\nA large, resize-responsive clock for modern UTF-8 xterm-compatible terminals.\nUses your terminal's foreground color. Use Ctrl-C to exit.";
+const USAGE: &str = "Usage: tclok [--12h|--24h] [--seconds|--no-seconds] [--color <#RRGGBB>]\n\nA large, resize-responsive clock for modern UTF-8 xterm-compatible terminals.\nUses your terminal's foreground color unless --color is provided. Use Ctrl-C to exit.";
 
 fn main() -> ExitCode {
     match run() {
@@ -33,7 +33,7 @@ fn run() -> Result<(), String> {
     }
 
     let _session = terminal::TerminalSession::enter().map_err(|error| error.to_string())?;
-    let foreground = terminal::terminal_foreground_color();
+    let foreground = options.color.or_else(terminal::terminal_foreground_color);
     while !terminal::stop_requested() {
         if let Some(size) = terminal::terminal_size() {
             let clock = ClockSnapshot::now(options);
@@ -41,9 +41,9 @@ fn run() -> Result<(), String> {
                 .is_ok_and(|program| program.eq_ignore_ascii_case("ghostty"))
             {
                 neue_machina::render(size, terminal::terminal_pixel_size(), foreground, &clock)
-                    .unwrap_or_else(|| render_frame(&select_layout(size, &clock)))
+                    .unwrap_or_else(|| render_frame(&select_layout(size, &clock), options.color))
             } else {
-                render_frame(&select_layout(size, &clock))
+                render_frame(&select_layout(size, &clock), options.color)
             };
             let mut stdout = io::stdout().lock();
             stdout
@@ -63,12 +63,19 @@ fn run() -> Result<(), String> {
 
 fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, String> {
     let mut options = Options::default();
-    for argument in arguments {
+    let mut arguments = arguments;
+    while let Some(argument) = arguments.next() {
         match argument.as_str() {
             "--12h" => options.hour_format = HourFormat::H12,
             "--24h" => options.hour_format = HourFormat::H24,
             "--seconds" => options.show_seconds = true,
             "--no-seconds" => options.show_seconds = false,
+            "--color" => {
+                let value = arguments
+                    .next()
+                    .ok_or_else(|| "--color expects a hex value such as #7aa2f7".to_owned())?;
+                options.color = Some(parse_color(&value)?);
+            }
             "--help" | "-h" => {
                 println!("{USAGE}");
                 std::process::exit(0);
@@ -77,10 +84,18 @@ fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, Str
                 println!("tclok {}", env!("CARGO_PKG_VERSION"));
                 std::process::exit(0);
             }
+            value if value.starts_with("--color=") => {
+                options.color = Some(parse_color(&value[8..])?);
+            }
             unknown => return Err(format!("unknown option: {unknown}\n\n{USAGE}")),
         }
     }
     Ok(options)
+}
+
+fn parse_color(value: &str) -> Result<Rgb, String> {
+    Rgb::from_hex(value)
+        .ok_or_else(|| format!("invalid color `{value}`; use #RRGGBB or #RGB\n\n{USAGE}"))
 }
 
 #[cfg(test)]
@@ -93,10 +108,21 @@ mod tests {
             .expect("valid options");
         assert_eq!(options.hour_format, HourFormat::H12);
         assert!(!options.show_seconds);
+        assert_eq!(options.color, None);
     }
 
     #[test]
-    fn removed_color_override_is_an_error() {
+    fn parses_hex_color_in_both_forms() {
+        let equals = parse_options(["--color=#7aa2f7"].map(str::to_owned).into_iter())
+            .expect("valid hex color");
+        let separate = parse_options(["--color", "#abc"].map(str::to_owned).into_iter())
+            .expect("valid short hex color");
+        assert_eq!(equals.color, Some(Rgb::new(0x7a, 0xa2, 0xf7)));
+        assert_eq!(separate.color, Some(Rgb::new(0xaa, 0xbb, 0xcc)));
+    }
+
+    #[test]
+    fn rejects_invalid_color() {
         assert!(parse_options(["--color=always"].map(str::to_owned).into_iter()).is_err());
     }
 }

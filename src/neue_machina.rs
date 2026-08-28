@@ -4,6 +4,7 @@
 //! On macOS Ghostty, tclok uses CoreGraphics to draw the installed face and
 //! transmits the resulting pixels through the Kitty graphics protocol.
 
+use crate::Rgb;
 use crate::clock::ClockSnapshot;
 use crate::layout::TerminalSize;
 
@@ -15,7 +16,7 @@ const ESC: &str = "\x1b";
 pub fn render(
     size: TerminalSize,
     pixels: Option<(u16, u16)>,
-    foreground: Option<(f64, f64, f64)>,
+    foreground: Option<Rgb>,
     clock: &ClockSnapshot,
 ) -> Option<String> {
     #[cfg(target_os = "macos")]
@@ -112,7 +113,7 @@ mod macos {
     use std::ffi::{c_char, c_int, c_void};
 
     use super::kitty_frame;
-    use crate::{clock::ClockSnapshot, layout::TerminalSize};
+    use crate::{Rgb, clock::ClockSnapshot, layout::TerminalSize};
 
     type CGFloat = f64;
     type CFTypeRef = *const c_void;
@@ -212,7 +213,7 @@ mod macos {
     pub(super) fn render(
         size: TerminalSize,
         pixels: Option<(u16, u16)>,
-        foreground: Option<(f64, f64, f64)>,
+        foreground: Option<Rgb>,
         clock: &ClockSnapshot,
     ) -> Option<String> {
         if size.columns < 12 || size.rows < 4 {
@@ -272,7 +273,7 @@ mod macos {
         text: &str,
         width: usize,
         height: usize,
-        foreground: Option<(f64, f64, f64)>,
+        foreground: Option<Rgb>,
     ) -> Option<Vec<u8>> {
         let c_name = b"FiraCode-Bold\0";
         // SAFETY: CoreFoundation copies this valid NUL-terminated UTF-8 name.
@@ -386,7 +387,9 @@ mod macos {
         // SAFETY: `context`, `font`, glyphs, and positions are valid for these calls.
         unsafe {
             CGContextSetTextDrawingMode(context, KCG_TEXT_FILL);
-            let (red, green, blue) = foreground.unwrap_or((0.94, 0.94, 0.94));
+            let (red, green, blue) = foreground
+                .map(Rgb::normalized)
+                .unwrap_or((0.94, 0.94, 0.94));
             CGContextSetRGBFillColor(context, red, green, blue, 1.0);
             CGContextSetFont(context, font);
             CGContextSetFontSize(context, font_size);
@@ -418,7 +421,7 @@ mod macos {
 
         #[test]
         fn rasterized_face_uses_terminal_foreground_color() {
-            let Some(rgba) = rasterize("12", 320, 180, Some((0.2, 0.8, 0.4))) else {
+            let Some(rgba) = rasterize("12", 320, 180, Some(Rgb::new(51, 204, 102))) else {
                 return;
             };
             let (pixels, remainder) = rgba.as_chunks::<4>();

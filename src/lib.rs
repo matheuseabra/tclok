@@ -19,9 +19,55 @@ pub enum HourFormat {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Rgb {
+    pub red: u8,
+    pub green: u8,
+    pub blue: u8,
+}
+
+impl Rgb {
+    pub const fn new(red: u8, green: u8, blue: u8) -> Self {
+        Self { red, green, blue }
+    }
+
+    pub fn from_hex(value: &str) -> Option<Self> {
+        let value = value.strip_prefix('#').unwrap_or(value);
+        if !value.is_ascii() {
+            return None;
+        }
+        let value = match value.len() {
+            3 => {
+                let mut expanded = String::with_capacity(6);
+                for byte in value.bytes() {
+                    let digit = char::from(byte);
+                    expanded.push(digit);
+                    expanded.push(digit);
+                }
+                return Self::from_hex(&expanded);
+            }
+            6 => value,
+            _ => return None,
+        };
+        let red = u8::from_str_radix(&value[0..2], 16).ok()?;
+        let green = u8::from_str_radix(&value[2..4], 16).ok()?;
+        let blue = u8::from_str_radix(&value[4..6], 16).ok()?;
+        Some(Self::new(red, green, blue))
+    }
+
+    pub fn normalized(self) -> (f64, f64, f64) {
+        (
+            f64::from(self.red) / 255.0,
+            f64::from(self.green) / 255.0,
+            f64::from(self.blue) / 255.0,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Options {
     pub hour_format: HourFormat,
     pub show_seconds: bool,
+    pub color: Option<Rgb>,
 }
 
 impl Default for Options {
@@ -29,6 +75,7 @@ impl Default for Options {
         Self {
             hour_format: HourFormat::H24,
             show_seconds: true,
+            color: None,
         }
     }
 }
