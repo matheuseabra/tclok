@@ -1,0 +1,22 @@
+[package]
+name = "tclok"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "A dependency-free, resize-responsive terminal clock for modern panes"
+license = "MIT"
+repository = "https://github.com/matheuseabra/tclok"
+homepage = "https://github.com/matheuseabra/tclok"
+documentation = "https://docs.rs/tclok"
+readme = "README.md"
+keywords = ["clock", "terminal", "tui", "ghostty"]
+categories = ["command-line-utilities"]
+include = ["/Cargo.lock", "/Cargo.toml", "/LICENSE", "/README.md", "/src/**", "/tests/**"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+strip = "symbols"
+
+[dependencies]
