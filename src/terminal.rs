@@ -247,12 +247,32 @@ pub fn sleep_until_signal_or_timeout(duration: Duration) {
 
 pub struct TerminalSession {
     previous_handlers: [(c_int, usize); 3],
+    #[cfg(target_os = "macos")]
+    previous_termios: Option<Termios>,
 }
 
 impl TerminalSession {
     pub fn enter() -> io::Result<Self> {
-        let previous_handlers = install_handlers()?;
-        let session = Self { previous_handlers };
+        #[cfg(target_os = "macos")]
+        let previous_termios = enable_interrupt_character()?;
+        let previous_handlers = match install_handlers() {
+            Ok(previous_handlers) => previous_handlers,
+            Err(error) => {
+                #[cfg(target_os = "macos")]
+                if let Some(previous) = previous_termios {
+                    const TCSANOW: c_int = 0;
+                    // SAFETY: restore the exact terminal state captured before
+                    // the failed session initialization.
+                    let _ = unsafe { tcsetattr(STDIN_FILENO, TCSANOW, &previous) };
+                }
+                return Err(error);
+            }
+        };
+        let session = Self {
+            previous_handlers,
+            #[cfg(target_os = "macos")]
+            previous_termios,
+        };
         let mut stdout = io::stdout().lock();
         if let Err(error) = stdout.write_all(b"\x1b[?1049h\x1b[?25l\x1b[0m") {
             drop(session);
@@ -307,7 +327,38 @@ impl Drop for TerminalSession {
                 signal(signal_number, previous);
             }
         }
+        #[cfg(target_os = "macos")]
+        if let Some(previous) = self.previous_termios {
+            const TCSANOW: c_int = 0;
+            // SAFETY: `previous` was captured from this same stdin fd before
+            // the session changed its signal-generating terminal flags.
+            let _ = unsafe { tcsetattr(STDIN_FILENO, TCSANOW, &previous) };
+        }
     }
+}
+
+#[cfg(target_os = "macos")]
+fn enable_interrupt_character() -> io::Result<Option<Termios>> {
+    const ISIG: c_ulong = 0x0000_0080;
+    const TCSANOW: c_int = 0;
+    let mut original = std::mem::MaybeUninit::<Termios>::uninit();
+    // SAFETY: stdin is the interactive terminal fd and `original` has the
+    // Darwin termios ABI layout used by tcgetattr.
+    if unsafe { tcgetattr(STDIN_FILENO, original.as_mut_ptr()) } != 0 {
+        return Ok(None);
+    }
+    // SAFETY: tcgetattr succeeded, so this value is initialized.
+    let original = unsafe { original.assume_init() };
+    let mut configured = original;
+    configured.local_flags |= ISIG;
+    if configured.local_flags != original.local_flags {
+        // SAFETY: `configured` only enables the terminal's standard signal
+        // generation and is valid for this fd.
+        if unsafe { tcsetattr(STDIN_FILENO, TCSANOW, &configured) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(Some(original))
 }
 
 #[cfg(all(test, target_os = "macos"))]
