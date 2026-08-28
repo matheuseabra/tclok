@@ -24,7 +24,7 @@ pub fn render(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (size, pixels, clock);
+        let _ = (size, pixels, foreground, clock);
         None
     }
 }

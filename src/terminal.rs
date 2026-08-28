@@ -135,6 +135,7 @@ pub fn terminal_foreground_color() -> Option<(f64, f64, f64)> {
 }
 
 #[cfg(any(target_os = "macos", test))]
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 fn parse_foreground_response(bytes: &[u8]) -> Option<(f64, f64, f64)> {
     let response = std::str::from_utf8(bytes).ok()?;
     let value = response.split_once("rgb:")?.1;
