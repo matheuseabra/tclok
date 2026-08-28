@@ -4,7 +4,7 @@
 [![crates.io](https://img.shields.io/crates/v/tclok.svg)](https://crates.io/crates/tclok)
 [![License](https://img.shields.io/crates/l/tclok.svg)](LICENSE)
 
-![tclok demo](assets/tclok.gif)
+![tclok running in Ghostty with the native Fira Code Bold face](assets/tclok.gif)
 
 A dependency-free, resize-responsive terminal clock for modern panes.
 
