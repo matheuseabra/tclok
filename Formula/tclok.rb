@@ -1,14 +1,14 @@
 class Tclok < Formula
   desc "Dependency-free, resize-responsive terminal clock"
   homepage "https://github.com/matheuseabra/tclok"
-  url "https://crates.io/api/v1/crates/tclok/0.1.0/download"
-  sha256 "12bed5981b794aaf88db278dda6cb44244e98f0fa1a4885ed777d31ecadd2634"
+  url "https://github.com/matheuseabra/tclok/archive/refs/tags/v0.1.0.tar.gz"
+  sha256 "ce6b8b22332e3bfbb49a1037d33330fd0613e34683ba79b1f6fb7d1383a4cb6f"
   license "MIT"
 
   depends_on "rust" => :build
 
   def install
-    system "cargo", "install", *std_cargo_args(lock: true), "--path", "."
+    system "cargo", "install", *std_cargo_args
   end
 
   test do
