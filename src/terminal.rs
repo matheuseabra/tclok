@@ -6,6 +6,7 @@ use std::time::Duration;
 use crate::layout::TerminalSize;
 
 const STDOUT_FILENO: c_int = 1;
+#[cfg(target_os = "macos")]
 const STDIN_FILENO: c_int = 0;
 const SIGINT: c_int = 2;
 const SIGTERM: c_int = 15;
