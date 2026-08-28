@@ -9,7 +9,7 @@ use tclok::render::render_frame;
 use tclok::terminal;
 use tclok::{HourFormat, Options, Rgb};
 
-const USAGE: &str = "Usage: tclok [--12h|--24h] [--seconds|--no-seconds] [--color <#RRGGBB>]\n\nA large, resize-responsive clock for modern UTF-8 xterm-compatible terminals.\nUses your terminal's foreground color unless --color is provided. Use Ctrl-C to exit.";
+const USAGE: &str = "Usage: tclok [--12h|--24h] [--seconds|--no-seconds] [--color <#RRGGBB>] [--gradient]\n\nA large, resize-responsive clock for modern UTF-8 xterm-compatible terminals.\nUses your terminal's foreground color unless --color is provided. Use Ctrl-C to exit.";
 
 fn main() -> ExitCode {
     match run() {
@@ -34,16 +34,27 @@ fn run() -> Result<(), String> {
 
     let _session = terminal::TerminalSession::enter().map_err(|error| error.to_string())?;
     let foreground = options.color.or_else(terminal::terminal_foreground_color);
+    let gradient = options
+        .gradient
+        .then(|| foreground.unwrap_or(Rgb::new(240, 240, 240)).gradient());
     while !terminal::stop_requested() {
         if let Some(size) = terminal::terminal_size() {
             let clock = ClockSnapshot::now(options);
             let frame = if env::var("TERM_PROGRAM")
                 .is_ok_and(|program| program.eq_ignore_ascii_case("ghostty"))
             {
-                neue_machina::render(size, terminal::terminal_pixel_size(), foreground, &clock)
-                    .unwrap_or_else(|| render_frame(&select_layout(size, &clock), options.color))
+                neue_machina::render(
+                    size,
+                    terminal::terminal_pixel_size(),
+                    foreground,
+                    gradient,
+                    &clock,
+                )
+                .unwrap_or_else(|| {
+                    render_frame(&select_layout(size, &clock), options.color, gradient)
+                })
             } else {
-                render_frame(&select_layout(size, &clock), options.color)
+                render_frame(&select_layout(size, &clock), options.color, gradient)
             };
             let mut stdout = io::stdout().lock();
             stdout
@@ -70,6 +81,7 @@ fn parse_options(arguments: impl Iterator<Item = String>) -> Result<Options, Str
             "--24h" => options.hour_format = HourFormat::H24,
             "--seconds" => options.show_seconds = true,
             "--no-seconds" => options.show_seconds = false,
+            "--gradient" => options.gradient = true,
             "--color" => {
                 let value = arguments
                     .next()
@@ -109,6 +121,7 @@ mod tests {
         assert_eq!(options.hour_format, HourFormat::H12);
         assert!(!options.show_seconds);
         assert_eq!(options.color, None);
+        assert!(!options.gradient);
     }
 
     #[test]
@@ -119,6 +132,18 @@ mod tests {
             .expect("valid short hex color");
         assert_eq!(equals.color, Some(Rgb::new(0x7a, 0xa2, 0xf7)));
         assert_eq!(separate.color, Some(Rgb::new(0xaa, 0xbb, 0xcc)));
+    }
+
+    #[test]
+    fn parses_gradient_flag() {
+        let options = parse_options(
+            ["--color=#7aa2f7", "--gradient"]
+                .map(str::to_owned)
+                .into_iter(),
+        )
+        .expect("valid gradient options");
+        assert!(options.gradient);
+        assert_eq!(options.color, Some(Rgb::new(0x7a, 0xa2, 0xf7)));
     }
 
     #[test]

@@ -4,9 +4,9 @@
 //! On macOS Ghostty, tclok uses CoreGraphics to draw the installed face and
 //! transmits the resulting pixels through the Kitty graphics protocol.
 
-use crate::Rgb;
 use crate::clock::ClockSnapshot;
 use crate::layout::TerminalSize;
+use crate::{Gradient, Rgb};
 
 #[cfg(any(target_os = "macos", test))]
 const IMAGE_ID: u32 = 1_624_011;
@@ -17,15 +17,16 @@ pub fn render(
     size: TerminalSize,
     pixels: Option<(u16, u16)>,
     foreground: Option<Rgb>,
+    gradient: Option<Gradient>,
     clock: &ClockSnapshot,
 ) -> Option<String> {
     #[cfg(target_os = "macos")]
     {
-        macos::render(size, pixels, foreground, clock)
+        macos::render(size, pixels, foreground, gradient, clock)
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (size, pixels, foreground, clock);
+        let _ = (size, pixels, foreground, gradient, clock);
         None
     }
 }
@@ -113,7 +114,7 @@ mod macos {
     use std::ffi::{c_char, c_int, c_void};
 
     use super::kitty_frame;
-    use crate::{Rgb, clock::ClockSnapshot, layout::TerminalSize};
+    use crate::{Gradient, Rgb, clock::ClockSnapshot, layout::TerminalSize};
 
     type CGFloat = f64;
     type CFTypeRef = *const c_void;
@@ -214,6 +215,7 @@ mod macos {
         size: TerminalSize,
         pixels: Option<(u16, u16)>,
         foreground: Option<Rgb>,
+        gradient: Option<Gradient>,
         clock: &ClockSnapshot,
     ) -> Option<String> {
         if size.columns < 12 || size.rows < 4 {
@@ -243,7 +245,7 @@ mod macos {
             return None;
         }
         let time = display_time(size, &clock.face_text);
-        let rgba = rasterize(time, width, height, foreground)?;
+        let rgba = rasterize(time, width, height, foreground, gradient)?;
         let row = (size.rows.saturating_sub(rows) / 2).saturating_add(1);
         let column = (size.columns.saturating_sub(columns) / 2).saturating_add(1);
         let mut frame = kitty_frame(row, column, columns, rows, width, height, &rgba);
@@ -252,10 +254,20 @@ mod macos {
             if date_row <= size.rows {
                 let date_width = clock.date_text.chars().count() as u16;
                 let date_column = size.columns.saturating_sub(date_width.min(size.columns)) / 2 + 1;
+                let date_color = gradient.map(|gradient| gradient.bottom).or(foreground);
+                if let Some(color) = date_color {
+                    frame.push_str(&format!(
+                        "\x1b[38;2;{};{};{}m",
+                        color.red, color.green, color.blue
+                    ));
+                }
                 frame.push_str(&format!(
                     "\x1b[{date_row};{date_column}H{}",
                     clock.date_text
                 ));
+                if date_color.is_some() {
+                    frame.push_str("\x1b[0m");
+                }
             }
         }
         Some(frame)
@@ -274,6 +286,7 @@ mod macos {
         width: usize,
         height: usize,
         foreground: Option<Rgb>,
+        gradient: Option<Gradient>,
     ) -> Option<Vec<u8>> {
         let c_name = b"FiraCode-Bold\0";
         // SAFETY: CoreFoundation copies this valid NUL-terminated UTF-8 name.
@@ -387,9 +400,13 @@ mod macos {
         // SAFETY: `context`, `font`, glyphs, and positions are valid for these calls.
         unsafe {
             CGContextSetTextDrawingMode(context, KCG_TEXT_FILL);
-            let (red, green, blue) = foreground
-                .map(Rgb::normalized)
-                .unwrap_or((0.94, 0.94, 0.94));
+            let (red, green, blue) = if gradient.is_some() {
+                (1.0, 1.0, 1.0)
+            } else {
+                foreground
+                    .map(Rgb::normalized)
+                    .unwrap_or((0.94, 0.94, 0.94))
+            };
             CGContextSetRGBFillColor(context, red, green, blue, 1.0);
             CGContextSetFont(context, font);
             CGContextSetFontSize(context, font_size);
@@ -402,6 +419,19 @@ mod macos {
             CGContextRelease(context);
             CGFontRelease(font);
         }
+        if let Some(gradient) = gradient {
+            for row in 0..height {
+                let color = gradient.color_at(row as f64 / height.saturating_sub(1).max(1) as f64);
+                let (red, green, blue) = color.normalized();
+                for column in 0..width {
+                    let index = (row * width + column) * 4;
+                    let alpha = f64::from(rgba[index + 3]) / 255.0;
+                    rgba[index] = (red * alpha * 255.0).round() as u8;
+                    rgba[index + 1] = (green * alpha * 255.0).round() as u8;
+                    rgba[index + 2] = (blue * alpha * 255.0).round() as u8;
+                }
+            }
+        }
         Some(rgba)
     }
 
@@ -411,7 +441,7 @@ mod macos {
 
         #[test]
         fn installed_fira_code_bold_rasterizes_opaque_glyphs() {
-            let Some(rgba) = rasterize("12:34", 640, 180, None) else {
+            let Some(rgba) = rasterize("12:34", 640, 180, None, None) else {
                 return;
             };
             let (pixels, remainder) = rgba.as_chunks::<4>();
@@ -421,7 +451,7 @@ mod macos {
 
         #[test]
         fn rasterized_face_uses_terminal_foreground_color() {
-            let Some(rgba) = rasterize("12", 320, 180, Some(Rgb::new(51, 204, 102))) else {
+            let Some(rgba) = rasterize("12", 320, 180, Some(Rgb::new(51, 204, 102)), None) else {
                 return;
             };
             let (pixels, remainder) = rgba.as_chunks::<4>();
@@ -448,6 +478,7 @@ mod macos {
                     rows: 10,
                 },
                 None,
+                Some(Rgb::new(18, 52, 86)),
                 None,
                 &clock,
             ) else {
@@ -456,6 +487,7 @@ mod macos {
             assert!(frame.contains("a=T,f=32"));
             assert!(frame.contains("27/08/2026"));
             assert!(frame.contains("\x1b[9;26H27/08/2026"));
+            assert!(frame.contains("\x1b[38;2;18;52;86m"));
             assert!(!frame.contains('█'));
         }
 

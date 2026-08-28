@@ -61,6 +61,37 @@ impl Rgb {
             f64::from(self.blue) / 255.0,
         )
     }
+
+    pub fn gradient(self) -> Gradient {
+        Gradient {
+            top: self,
+            bottom: Self::new(
+                self.red.saturating_mul(4) / 5,
+                self.green.saturating_mul(4) / 5,
+                self.blue.saturating_mul(4) / 5,
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Gradient {
+    pub top: Rgb,
+    pub bottom: Rgb,
+}
+
+impl Gradient {
+    pub fn color_at(self, position: f64) -> Rgb {
+        let position = position.clamp(0.0, 1.0);
+        let channel = |top: u8, bottom: u8| {
+            (f64::from(top) + (f64::from(bottom) - f64::from(top)) * position).round() as u8
+        };
+        Rgb::new(
+            channel(self.top.red, self.bottom.red),
+            channel(self.top.green, self.bottom.green),
+            channel(self.top.blue, self.bottom.blue),
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +99,7 @@ pub struct Options {
     pub hour_format: HourFormat,
     pub show_seconds: bool,
     pub color: Option<Rgb>,
+    pub gradient: bool,
 }
 
 impl Default for Options {
@@ -76,6 +108,7 @@ impl Default for Options {
             hour_format: HourFormat::H24,
             show_seconds: true,
             color: None,
+            gradient: false,
         }
     }
 }

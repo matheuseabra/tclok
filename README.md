@@ -29,7 +29,7 @@ tclok [--12h|--24h] [--seconds|--no-seconds] [--color <#RGB|#RRGGBB>]
 
 `tclok` redraws on resize, uses the alternate screen, and prints one plain timestamp when stdout is redirected.
 
-The clock inherits the terminal's ANSI foreground color by default. Override it with a CSS-style hex color, for example `tclok --color=#7aa2f7`.
+The clock inherits the terminal's ANSI foreground color by default. Override it with a CSS-style hex color, for example `tclok --color=#7aa2f7`. Add `--gradient` to shade from that base color toward a darker version vertically.
 
 On macOS Ghostty with an installed `FiraCode-Bold` font, the large clock is rendered through Kitty graphics. At 10+ rows it includes a `DD/MM/YYYY` date; narrower panes remove seconds before using the text fallback.
 
