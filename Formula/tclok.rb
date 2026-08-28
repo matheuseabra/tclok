@@ -1,8 +1,8 @@
 class Tclok < Formula
   desc "Dependency-free, resize-responsive terminal clock"
   homepage "https://github.com/matheuseabra/tclok"
-  url "https://crates.io/api/v1/crates/tclok/0.1.1/download"
-  sha256 "3f61824697af5ebaedca8c66a7f1521a3e28e9c5786379f1c5878aa680e88173"
+  url "https://crates.io/api/v1/crates/tclok/0.1.2/download"
+  sha256 "ebca7d613c3429b815d3d22931cb638c610428a5370174611cc49320ffad0659"
   license "MIT"
 
   depends_on "rust" => :build
